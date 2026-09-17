@@ -291,6 +291,11 @@ def get_stories(category, limit=20, start=0):
     return stories
 
 
+def get_current_time_label():
+    """Return a simple local timestamp for the page refresh label."""
+    return datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+
 def get_all_news(limit=20):
     all_stories = []
     category_stories = {}
@@ -846,6 +851,16 @@ body {
         height: 170px;
     }
 }
+
+.update-status {
+    display: inline-block;
+    margin: 8px 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
 </style>
 </head>
 
@@ -1434,6 +1449,14 @@ async function refreshNews() {
         button.disabled = false;
         button.innerText =
             "🔄 Refresh News";
+
+        const status =
+            document.getElementById("updateStatus");
+
+        if (status) {
+            status.innerText =
+                "🕒 Updated just now";
+        }
     }
 }
 
