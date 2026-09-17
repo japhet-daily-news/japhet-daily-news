@@ -861,12 +861,232 @@ body {
     opacity: 0.8;
 }
 
+
+/* ============================================================
+   MOBILE-FIRST + THEME MODE UPGRADE
+   ============================================================ */
+:root {
+    --page-bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-soft: #f5f5f5;
+    --text: #222222;
+    --muted: #666666;
+    --border: #dddddd;
+    --accent: #b00000;
+    --button: #111111;
+    --button-text: #ffffff;
+    --shadow: rgba(0,0,0,0.15);
+}
+
+body {
+    color: var(--text);
+}
+
+.search-area,
+.nav,
+.refresh-bar,
+.search-info,
+.no-results,
+.video-search-panel,
+.featured,
+.card,
+.card-footer {
+    transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+}
+
+.theme-toggle {
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    padding: 9px 13px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 13px;
+    backdrop-filter: blur(8px);
+}
+
+.theme-toggle:hover { background: rgba(255,255,255,.22); }
+
+body.dark-mode {
+    --page-bg: #0d1117;
+    --surface: #161b22;
+    --surface-soft: #21262d;
+    --text: #f0f6fc;
+    --muted: #a8b1bd;
+    --border: #30363d;
+    --button: #f0f6fc;
+    --button-text: #111111;
+    --shadow: rgba(0,0,0,.42);
+    background:
+        linear-gradient(rgba(0,0,0,.84), rgba(0,0,0,.84)),
+        url("/static/images/background.jpg");
+    color: var(--text);
+}
+
+body.dark-mode .search-area,
+body.dark-mode .nav,
+body.dark-mode .refresh-bar,
+body.dark-mode .search-info,
+body.dark-mode .no-results,
+body.dark-mode .video-search-panel,
+body.dark-mode .featured,
+body.dark-mode .card {
+    background: var(--surface);
+    color: var(--text);
+}
+
+body.dark-mode .card-footer {
+    background: var(--surface-soft);
+    color: var(--muted);
+}
+
+body.dark-mode .card p,
+body.dark-mode .featured p,
+body.dark-mode #refreshMessage,
+body.dark-mode .video-free-note {
+    color: var(--muted);
+}
+
+body.dark-mode .nav a {
+    background: var(--surface-soft);
+    color: var(--text);
+}
+
+body.dark-mode .nav a:hover {
+    background: #fff;
+    color: #111;
+}
+
+body.dark-mode .search-box input,
+body.dark-mode .video-search input {
+    background: var(--surface-soft);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .search-box button,
+body.dark-mode .refresh-btn,
+body.dark-mode .read-btn,
+body.dark-mode .video-search button,
+body.dark-mode .load-more-btn {
+    background: var(--button);
+    color: var(--button-text);
+}
+
+body.dark-mode .section-title {
+    color: #fff;
+}
+
+/* Better touch targets and small-screen layout */
+button, a, input { -webkit-tap-highlight-color: transparent; }
+
+@media (max-width: 700px) {
+    .header { padding: 58px 14px 20px; position: relative; }
+    .logo { font-size: clamp(24px, 8vw, 34px); line-height: 1.1; }
+    .tagline { font-size: 13px; }
+    .live-status { font-size: 12px; }
+    .theme-toggle { top: 12px; right: 12px; }
+
+    .search-area { padding: 12px; }
+    .search-box { width: 100%; gap: 8px; }
+    .search-box input { min-width: 0; border-radius: 10px; padding: 13px 12px; }
+    .search-box button { width: auto; border-radius: 10px; padding: 13px 12px; white-space: nowrap; }
+
+    .nav {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: 10px 12px;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a { flex: 0 0 auto; padding: 10px 14px; }
+
+    .refresh-bar { padding: 10px 12px; }
+    .refresh-btn { width: 100%; min-height: 44px; }
+    #refreshMessage { display: block; margin: 7px 0 0; }
+
+    .breaking { font-size: 13px; line-height: 1.45; padding: 11px 13px; }
+    .container { padding: 14px 10px 28px; }
+    .featured { padding: 18px; border-radius: 14px; }
+    .featured h1 { font-size: clamp(22px, 6vw, 29px); }
+    .section-title { font-size: 21px; margin: 24px 0 12px; }
+
+    .news-grid { grid-template-columns: 1fr; gap: 14px; }
+    .card { border-radius: 14px; }
+    .card-image { height: 205px; }
+    .card-top { padding: 15px; }
+    .card h3 { font-size: 18px; }
+    .read-btn { min-height: 42px; padding: 11px 14px; }
+
+    .video-search-panel { padding: 15px; }
+    .video-search { flex-direction: column; }
+    .video-search input,
+    .video-search button { width: 100%; min-height: 44px; }
+    .video-category-buttons { justify-content: flex-start; }
+    .video-category-buttons button { min-height: 42px; }
+}
+
+@media (min-width: 701px) {
+    .header { position: relative; }
+}
+
+
+:root {
+    --story-surface: #ffffff;
+    --story-text: #222;
+    --story-muted: #444;
+    --story-button: #111;
+}
+body.dark-mode {
+    --story-surface: #161b22;
+    --story-text: #f0f6fc;
+    --story-muted: #b4beca;
+    --story-button: #f0f6fc;
+    color: var(--story-text);
+    background:
+        linear-gradient(rgba(0,0,0,.84), rgba(0,0,0,.84)),
+        url("/static/images/background.jpg");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+.theme-toggle-story {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.12);
+    color: white;
+    padding: 9px 13px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.article { background: var(--story-surface); color: var(--story-text); transition: background .25s, color .25s; }
+.description { color: var(--story-muted); }
+.original { background: var(--story-button); color: var(--story-surface); }
+.back { color: var(--story-text); }
+@media(max-width:600px) {
+    .header { position: relative; padding: 55px 15px 20px; }
+    .theme-toggle-story { top: 12px; right: 12px; }
+    .article { margin: 14px 10px; padding: 18px; }
+    h1 { font-size: 24px; }
+    .description { font-size: 16px; line-height: 1.7; }
+    .original { width: 100%; text-align: center; min-height: 44px; }
+}
 </style>
 </head>
 
 <body>
 
 <header class="header">
+    <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()">🌙 Dark</button>
     <div class="logo">JAPHET DAILY NEWS</div>
     <div class="tagline">
         Stay informed. Stay connected.
@@ -1548,6 +1768,30 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+
+
+function applyTheme(theme) {
+    const dark = theme === "dark";
+    document.body.classList.toggle("dark-mode", dark);
+    const button = document.getElementById("themeToggle");
+    if (button) {
+        button.textContent = dark ? "☀️ Light" : "🌙 Dark";
+        button.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+    }
+}
+
+function toggleTheme() {
+    const current = document.body.classList.contains("dark-mode") ? "dark" : "light";
+    const next = current === "dark" ? "light" : "dark";
+    localStorage.setItem("jdn-theme", next);
+    applyTheme(next);
+}
+
+(function initTheme() {
+    const saved = localStorage.getItem("jdn-theme");
+    const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyTheme(saved || (preferred ? "dark" : "light"));
+})();
 </script>
 
 </body>
@@ -1757,6 +2001,8 @@ h1 {
 
 <header class="header">
 
+    <button class="theme-toggle-story" id="storyThemeToggle" type="button" onclick="toggleStoryTheme()">🌙 Dark</button>
+
     <div class="logo">
         JAPHET DAILY NEWS
     </div>
@@ -1816,6 +2062,26 @@ h1 {
 
 </article>
 
+
+<script>
+function applyStoryTheme(theme) {
+    const dark = theme === "dark";
+    document.body.classList.toggle("dark-mode", dark);
+    const button = document.getElementById("storyThemeToggle");
+    if (button) button.textContent = dark ? "☀️ Light" : "🌙 Dark";
+}
+function toggleStoryTheme() {
+    const current = document.body.classList.contains("dark-mode") ? "dark" : "light";
+    const next = current === "dark" ? "light" : "dark";
+    localStorage.setItem("jdn-theme", next);
+    applyStoryTheme(next);
+}
+(function(){
+    const saved = localStorage.getItem("jdn-theme");
+    const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyStoryTheme(saved || (preferred ? "dark" : "light"));
+})();
+</script>
 </body>
 
 </html>
