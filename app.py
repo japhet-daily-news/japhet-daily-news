@@ -749,6 +749,51 @@ body {
 }
 
 
+
+.video-search-panel {
+    background: rgba(255,255,255,0.96);
+    padding: 20px;
+    border-radius: 12px;
+    margin: 0 auto 20px;
+    max-width: 900px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+.video-search-title {
+    text-align: center;
+    font-size: 19px;
+    font-weight: bold;
+    margin-bottom: 12px;
+}
+
+.video-category-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px auto 12px;
+}
+
+.video-category-buttons button {
+    border: none;
+    background: #111;
+    color: white;
+    padding: 9px 13px;
+    border-radius: 18px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.video-category-buttons button:hover {
+    background: #b00000;
+}
+
+.video-free-note {
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+}
+
 .video-search {
     max-width: 850px;
     margin: 0 auto 20px;
@@ -971,6 +1016,36 @@ href="/story?title={{ breaking.title|urlencode }}&description={{ breaking.descri
 <h2 class="section-title">
     🎥 Latest Videos
 </h2>
+
+<div class="video-search-panel">
+    <div class="video-search-title">🎬 Search News Videos</div>
+
+    <div class="video-search">
+        <input
+            id="videoSearch"
+            type="text"
+            placeholder="Search for a video topic..."
+            onkeydown="if(event.key === 'Enter') searchVideos()"
+        >
+        <button type="button" onclick="searchVideos()">
+            🔎 Find Videos
+        </button>
+    </div>
+
+    <div class="video-category-buttons">
+        <button onclick="searchCategoryVideo('Nigeria news')">🇳🇬 Nigeria</button>
+        <button onclick="searchCategoryVideo('World news')">🌍 World</button>
+        <button onclick="searchCategoryVideo('Football news')">⚽ Football</button>
+        <button onclick="searchCategoryVideo('Technology news')">💻 Technology</button>
+        <button onclick="searchCategoryVideo('AI news')">🤖 AI</button>
+        <button onclick="searchCategoryVideo('WWE news')">🤼 WWE</button>
+        <button onclick="searchCategoryVideo('Business news')">💼 Business</button>
+    </div>
+
+    <div class="video-free-note">
+        Free video search — no YouTube API key required.
+    </div>
+</div>
 
 <div class="news-grid">
 
@@ -1394,6 +1469,21 @@ function searchVideos() {
         + encodeURIComponent(
             query + " news"
         );
+
+    window.open(
+        url,
+        "_blank",
+        "noopener,noreferrer"
+    );
+}
+
+
+
+function searchCategoryVideo(category) {
+
+    const url =
+        "https://www.youtube.com/results?search_query="
+        + encodeURIComponent(category);
 
     window.open(
         url,
