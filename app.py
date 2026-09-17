@@ -9,6 +9,7 @@ app = Flask(__name__)
 # Some news servers reject requests that do not look like a normal browser.
 # Use a simple User-Agent for RSS requests.
 import urllib.request
+from urllib.parse import quote_plus
 
 class NewsRequestHandler(urllib.request.HTTPRedirectHandler):
     pass
@@ -169,6 +170,68 @@ def detect_video(item):
     )
 
 
+def search_news(query, limit=30):
+    """Search Google News RSS live across all JAPHET DAILY NEWS categories."""
+    query = clean_text(query).strip()
+    if not query:
+        return []
+
+    results = []
+    seen = set()
+
+    for category in FEEDS:
+        search_url = (
+            "https://news.google.com/rss/search?q="
+            + quote_plus(query + " " + category)
+            + "&hl=en-NG&gl=NG&ceid=NG:en"
+        )
+
+        try:
+            print("Searching:", search_url)
+            feed = fetch_feed(search_url)
+
+            for item in feed.entries:
+                title = clean_text(item.get("title", ""))
+                if not title:
+                    continue
+
+                key = title.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                description = clean_text(
+                    item.get(
+                        "summary",
+                        item.get(
+                            "description",
+                            item.get("title", "")
+                        )
+                    )
+                )
+
+                results.append({
+                    "title": title,
+                    "description": description,
+                    "link": item.get("link", "#"),
+                    "published": item.get(
+                        "published",
+                        item.get("updated", "")
+                    ),
+                    "timestamp": get_timestamp(item),
+                    "category": category,
+                    "source": SOURCES.get(category, ""),
+                    "image": get_image(item),
+                    "video": detect_video(item),
+                })
+
+        except Exception as error:
+            print("Search error:", error)
+
+    results.sort(key=lambda x: x["timestamp"], reverse=True)
+    return results[:limit]
+
+
 def get_stories(category, limit=20, start=0):
     stories = []
     all_entries = []
@@ -253,26 +316,14 @@ def home():
     all_stories, category_stories = get_all_news(20)
 
     if search:
-        words = [
-            word.lower()
-            for word in search.split()
-            if word.strip()
-        ]
+        # Perform a fresh live search instead of searching only
+        # the stories already loaded on the homepage.
+        all_stories = search_news(search, 30)
 
-        def matches(story):
-            searchable = " ".join([
-                story["title"],
-                story["description"],
-                story["category"],
-                story["source"],
-            ]).lower()
-
-            return all(word in searchable for word in words)
-
-        all_stories = [
-            story for story in all_stories
-            if matches(story)
-        ]
+        category_stories = {
+            category: []
+            for category in FEEDS
+        }
 
     if selected_category in FEEDS:
         all_stories = [
@@ -672,6 +723,16 @@ body {
     opacity: 0.6;
 }
 
+.search-info {
+    background: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+    color: #555;
+    font-size: 14px;
+    text-align: center;
+}
+
 .no-results {
     background: white;
     padding: 30px;
@@ -763,7 +824,7 @@ body {
             type="text"
             name="search"
             value="{{ search }}"
-            placeholder="Search news, topics, sources..."
+            placeholder="Search any news topic..."
         >
         <button type="submit">🔎 SEARCH</button>
     </div>
@@ -809,6 +870,11 @@ body {
 
 <h2 class="section-title">
     🔎 Search Results: "{{ search }}"
+</h2>
+
+<div class="search-info">
+    Live search across Nigeria, World, Football, Technology, AI, WWE and Business.
+</div>
 </h2>
 
 {% if all_stories %}
