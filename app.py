@@ -891,6 +891,10 @@ body {
 </form>
 </div>
 
+<div style="background:rgba(255,255,255,0.96);padding:0 15px 18px;text-align:center;color:#666;font-size:13px;">
+    📰 Your daily source for fresh Nigeria, world, football, technology, AI, WWE and business news.
+</div>
+
 <nav class="nav">
     <a href="/">🏠 Home</a>
 
