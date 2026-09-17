@@ -3,40 +3,76 @@ import feedparser
 import re
 import html
 from datetime import datetime
-from urllib.parse import quote_plus
 
 app = Flask(__name__)
 
-# ============================================================
-# JAPHET DAILY NEWS - UPGRADED VERSION
-# Features:
-# 1. Automatic fresh news
-# 2. Better search
-# 3. Videos section
-# ============================================================
+# Some news servers reject requests that do not look like a normal browser.
+# Use a simple User-Agent for RSS requests.
+import urllib.request
 
-# =========================
-# NEWS FEEDS
-# =========================
+class NewsRequestHandler(urllib.request.HTTPRedirectHandler):
+    pass
+
+def fetch_feed(url):
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 Chrome/120 Safari/537.36"
+                )
+            },
+        )
+        with urllib.request.urlopen(request, timeout=12) as response:
+            data = response.read()
+        return feedparser.parse(data)
+    except Exception as error:
+        print("Could not fetch feed:", url, "|", error)
+        return feedparser.FeedParserDict(entries=[])
+
+
+# ============================================================
+# JAPHET DAILY NEWS
+# AUTOMATIC FRESH NEWS + BETTER SEARCH + VIDEOS
+# ============================================================
 
 FEEDS = {
-    "Nigeria": "https://feeds.bbci.co.uk/news/topics/c50znx8v132t/rss.xml",
-    "World": "https://feeds.bbci.co.uk/news/world/rss.xml",
-    "Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
-    "Technology": "https://feeds.bbci.co.uk/news/technology/rss.xml",
-    "AI": "https://openai.com/news/rss.xml",
-    "WWE": "https://www.postwrestling.com/feed/",
-    "Business": "https://feeds.bbci.co.uk/news/business/rss.xml"
+    # Google News RSS search feeds are used here because they are
+    # designed for current search results and do not require an API key.
+    "Nigeria": [
+        "https://news.google.com/rss/search?q=Nigeria&hl=en-NG&gl=NG&ceid=NG:en",
+        "https://news.google.com/rss/search?q=Nigeria+news&hl=en-NG&gl=NG&ceid=NG:en",
+    ],
+    "World": [
+        "https://news.google.com/rss/search?q=world+news&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "Football": [
+        "https://news.google.com/rss/search?q=football+news&hl=en-GB&gl=GB&ceid=GB:en",
+    ],
+    "Technology": [
+        "https://news.google.com/rss/search?q=technology+news&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "AI": [
+        "https://news.google.com/rss/search?q=artificial+intelligence+AI+news&hl=en-US&gl=US&ceid=US:en",
+        "https://openai.com/news/rss.xml",
+    ],
+    "WWE": [
+        "https://news.google.com/rss/search?q=WWE+news&hl=en-US&gl=US&ceid=US:en",
+    ],
+    "Business": [
+        "https://news.google.com/rss/search?q=business+news&hl=en-US&gl=US&ceid=US:en",
+    ],
 }
 
 SOURCES = {
-    "Nigeria": "BBC News",
+    "Nigeria": "BBC News / Premium Times",
     "World": "BBC News",
     "Football": "BBC Sport",
     "Technology": "BBC News",
     "AI": "OpenAI News",
     "WWE": "POST Wrestling",
-    "Business": "BBC News"
+    "Business": "BBC News",
 }
 
 ICONS = {
@@ -46,222 +82,206 @@ ICONS = {
     "Technology": "💻",
     "AI": "🤖",
     "WWE": "🤼",
-    "Business": "💼"
+    "Business": "💼",
 }
 
-# Video feeds. These are kept separate from normal news feeds.
-VIDEO_FEEDS = {
-    "BBC News": "https://feeds.bbci.co.uk/news/video_and_audio/rss.xml",
-    "BBC Sport": "https://feeds.bbci.co.uk/sport/rss.xml"
-}
-
-
-# =========================
-# CLEAN TEXT
-# =========================
 
 def clean_text(text):
     if not text:
         return ""
-
     text = html.unescape(str(text))
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
-
     return text.strip()
 
-
-# =========================
-# TIME HELPERS
-# =========================
 
 def get_timestamp(item):
     try:
         if getattr(item, "published_parsed", None):
             return datetime(*item.published_parsed[:6]).timestamp()
-
         if getattr(item, "updated_parsed", None):
             return datetime(*item.updated_parsed[:6]).timestamp()
     except Exception:
         pass
-
     return 0
 
 
-def get_published_text(item):
-    return item.get(
-        "published",
-        item.get("updated", "")
-    )
-
-
-# =========================
-# GET NEWS
-# =========================
-
-def get_stories(category, limit=20, start=0):
-    stories = []
-
-    try:
-        feed = feedparser.parse(FEEDS[category])
-        entries = feed.entries[start:start + limit]
-
-        for item in entries:
-            title = clean_text(item.get("title", "No title"))
-            description = clean_text(
-                item.get("summary", item.get("description", ""))
-            )
-            link = item.get("link", "#")
-            published = get_published_text(item)
-
-            stories.append({
-                "title": title,
-                "description": description,
-                "link": link,
-                "published": published,
-                "timestamp": get_timestamp(item),
-                "category": category,
-                "source": SOURCES.get(category, ""),
-                "image": get_image(item)
-            })
-
-    except Exception as e:
-        print(f"Error loading {category}: {e}")
-
-    return stories
-
-
-# =========================
-# IMAGE EXTRACTION
-# =========================
-
 def get_image(item):
     try:
-        media_content = item.get("media_content", [])
-        if media_content:
-            for media in media_content:
-                if media.get("url"):
-                    return media["url"]
+        for image in item.get("media_content", []):
+            if image.get("url"):
+                return image["url"]
+    except Exception:
+        pass
 
-        media_thumbnail = item.get("media_thumbnail", [])
-        if media_thumbnail:
-            for media in media_thumbnail:
-                if media.get("url"):
-                    return media["url"]
+    try:
+        for image in item.get("media_thumbnail", []):
+            if image.get("url"):
+                return image["url"]
+    except Exception:
+        pass
 
-        enclosures = item.get("enclosures", [])
-        for enclosure in enclosures:
-            url = enclosure.get("href") or enclosure.get("url")
+    try:
+        for enclosure in item.get("enclosures", []):
+            url = enclosure.get("href", "")
             mime = enclosure.get("type", "")
             if url and ("image" in mime or not mime):
                 return url
+    except Exception:
+        pass
 
+    try:
+        description = item.get("summary", "")
+        match = re.search(r'<img[^>]+src=["\']([^"\']+)', description, re.I)
+        if match:
+            return match.group(1)
     except Exception:
         pass
 
     return ""
 
 
-# =========================
-# GET VIDEOS
-# =========================
+def detect_video(item):
+    title = clean_text(item.get("title", "")).lower()
+    description = clean_text(
+        item.get("summary", item.get("description", ""))
+    ).lower()
+    link = item.get("link", "").lower()
 
-def get_videos(limit=20):
-    videos = []
+    combined = title + " " + description
 
-    for source_name, feed_url in VIDEO_FEEDS.items():
-        try:
-            feed = feedparser.parse(feed_url)
+    video_words = [
+        "video",
+        "watch",
+        "highlights",
+        "footage",
+        "clip",
+        "live",
+        "watch live",
+    ]
 
-            for item in feed.entries[:limit]:
-                title = clean_text(item.get("title", "Video"))
-                description = clean_text(
-                    item.get("summary", item.get("description", ""))
-                )
-                link = item.get("link", "#")
+    if any(word in combined for word in video_words):
+        return True
 
-                videos.append({
-                    "title": title,
-                    "description": description,
-                    "link": link,
-                    "published": get_published_text(item),
-                    "timestamp": get_timestamp(item),
-                    "source": source_name,
-                    "image": get_image(item)
-                })
-
-        except Exception as e:
-            print(f"Error loading videos from {source_name}: {e}")
-
-    videos.sort(
-        key=lambda x: x["timestamp"],
-        reverse=True
+    return any(
+        site in link
+        for site in ["youtube.com", "youtu.be", "vimeo.com"]
     )
 
-    return videos[:limit]
+
+def get_stories(category, limit=20, start=0):
+    stories = []
+    all_entries = []
+
+    for feed_url in FEEDS.get(category, []):
+        try:
+            print("Loading:", feed_url)
+            feed = fetch_feed(feed_url)
+            if feed.entries:
+                all_entries.extend(feed.entries)
+        except Exception as error:
+            print("Feed error:", error)
+
+    unique_entries = {}
+
+    for item in all_entries:
+        title = clean_text(item.get("title", "No title"))
+        if not title:
+            continue
+
+        key = title.lower()
+        if key not in unique_entries:
+            unique_entries[key] = item
+
+    all_entries = list(unique_entries.values())
+    all_entries.sort(key=get_timestamp, reverse=True)
+
+    for item in all_entries[start:start + limit]:
+        title = clean_text(item.get("title", "No title"))
+        description = clean_text(
+            item.get(
+                "summary",
+                item.get(
+                    "description",
+                    item.get("title", "")
+                )
+            )
+        )
+        link = item.get("link", "#")
+        published = item.get(
+            "published",
+            item.get("updated", "")
+        )
+
+        stories.append({
+            "title": title,
+            "description": description,
+            "link": link,
+            "published": published,
+            "timestamp": get_timestamp(item),
+            "category": category,
+            "source": SOURCES.get(category, ""),
+            "image": get_image(item),
+            "video": detect_video(item),
+        })
+
+    return stories
 
 
-# =========================
-# HOME PAGE
-# =========================
-
-@app.route("/")
-def home():
-
-    search = request.args.get("search", "").strip()
-    category_filter = request.args.get("category", "").strip()
-
-    category_stories = {}
+def get_all_news(limit=20):
     all_stories = []
+    category_stories = {}
 
-    # Fresh RSS data is fetched on each page request.
     for category in FEEDS:
-        stories = get_stories(category, 20, 0)
+        stories = get_stories(category, limit, 0)
         category_stories[category] = stories
         all_stories.extend(stories)
 
-    # Sort newest first
     all_stories.sort(
         key=lambda x: x["timestamp"],
         reverse=True
     )
 
-    # Better search
+    return all_stories, category_stories
+
+
+@app.route("/")
+def home():
+    search = request.args.get("search", "").strip()
+    selected_category = request.args.get("category", "").strip()
+
+    all_stories, category_stories = get_all_news(20)
+
     if search:
-        search_lower = search.lower()
         words = [
-            word for word in re.findall(r"\w+", search_lower)
-            if len(word) > 1
+            word.lower()
+            for word in search.split()
+            if word.strip()
         ]
 
         def matches(story):
             searchable = " ".join([
-                story.get("title", ""),
-                story.get("description", ""),
-                story.get("category", ""),
-                story.get("source", "")
+                story["title"],
+                story["description"],
+                story["category"],
+                story["source"],
             ]).lower()
 
-            # Exact phrase match
-            if search_lower in searchable:
-                return True
-
-            # Match all search words
-            return bool(words) and all(word in searchable for word in words)
+            return all(word in searchable for word in words)
 
         all_stories = [
             story for story in all_stories
             if matches(story)
         ]
 
-    if category_filter and category_filter in FEEDS:
+    if selected_category in FEEDS:
         all_stories = [
             story for story in all_stories
-            if story["category"] == category_filter
+            if story["category"] == selected_category
         ]
 
     breaking = all_stories[0] if all_stories else None
-    videos = get_videos(12)
+    videos = [story for story in all_stories if story["video"]]
 
     return render_template_string(
         HTML,
@@ -270,19 +290,14 @@ def home():
         category_stories=category_stories,
         all_stories=all_stories,
         breaking=breaking,
+        videos=videos,
         search=search,
-        category_filter=category_filter,
-        videos=videos
+        selected_category=selected_category,
     )
 
 
-# =========================
-# LOAD MORE NEWS
-# =========================
-
 @app.route("/load_more")
 def load_more():
-
     try:
         offset = int(request.args.get("offset", 20))
     except ValueError:
@@ -291,8 +306,7 @@ def load_more():
     stories = []
 
     for category in FEEDS:
-        new_stories = get_stories(category, 10, offset)
-        stories.extend(new_stories)
+        stories.extend(get_stories(category, 10, offset))
 
     stories.sort(
         key=lambda x: x["timestamp"],
@@ -301,88 +315,51 @@ def load_more():
 
     return jsonify({
         "stories": stories,
-        "has_more": len(stories) > 0
+        "has_more": len(stories) > 0,
     })
 
 
-# =========================
-# REFRESH NEWS API
-# =========================
+@app.route("/refresh")
+def refresh():
+    try:
+        stories, _ = get_all_news(20)
 
-@app.route("/api/refresh")
-def refresh_news():
-    stories = []
+        return jsonify({
+            "success": True,
+            "count": len(stories),
+            "message": "Fresh news loaded.",
+            "stories": stories[:30],
+        })
 
-    for category in FEEDS:
-        stories.extend(get_stories(category, 10, 0))
+    except Exception as error:
+        print("Refresh error:", error)
 
-    stories.sort(
-        key=lambda x: x["timestamp"],
-        reverse=True
-    )
+        return jsonify({
+            "success": False,
+            "message": "Unable to refresh news.",
+        }), 500
 
-    return jsonify({
-        "updated": True,
-        "count": len(stories),
-        "stories": stories[:30]
-    })
-
-
-# =========================
-# VIDEOS API
-# =========================
-
-@app.route("/videos")
-def videos_page():
-    videos = get_videos(30)
-
-    return render_template_string(
-        VIDEO_HTML,
-        videos=videos
-    )
-
-
-@app.route("/api/videos")
-def videos_api():
-    videos = get_videos(20)
-
-    return jsonify({
-        "videos": videos
-    })
-
-
-# =========================
-# STORY PAGE
-# =========================
 
 @app.route("/story")
 def story():
-
-    title = request.args.get("title", "")
-    description = request.args.get("description", "")
-    link = request.args.get("link", "#")
-    category = request.args.get("category", "")
-    source = request.args.get("source", "")
-
     return render_template_string(
         STORY_HTML,
-        title=title,
-        description=description,
-        link=link,
-        category=category,
-        source=source,
-        icon=ICONS.get(category, "📰")
+        title=request.args.get("title", ""),
+        description=request.args.get("description", ""),
+        link=request.args.get("link", "#"),
+        category=request.args.get("category", ""),
+        source=request.args.get("source", ""),
+        image=request.args.get("image", ""),
+        icon=ICONS.get(
+            request.args.get("category", ""),
+            "📰"
+        ),
     )
 
 
-# ============================================================
-# HOME HTML
-# ============================================================
-
-HTML = """
+HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -390,7 +367,6 @@ HTML = """
 <title>JAPHET DAILY NEWS</title>
 
 <style>
-
 * {
     box-sizing: border-box;
 }
@@ -398,27 +374,22 @@ HTML = """
 body {
     margin: 0;
     font-family: Arial, Helvetica, sans-serif;
-
     background:
         linear-gradient(
-            rgba(0,0,0,0.70),
-            rgba(0,0,0,0.70)
+            rgba(0,0,0,0.78),
+            rgba(0,0,0,0.78)
         ),
         url("/static/images/background.jpg");
-
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
-
     color: #222;
 }
 
-/* HEADER */
-
 .header {
-    background: rgba(0,0,0,0.92);
+    background: rgba(0,0,0,0.94);
     color: white;
-    padding: 22px 15px;
+    padding: 25px 15px;
     text-align: center;
 }
 
@@ -434,13 +405,8 @@ body {
     font-size: 14px;
 }
 
-/* LIVE UPDATE */
-
-.live-bar {
-    background: #111;
-    color: white;
-    text-align: center;
-    padding: 9px;
+.live-status {
+    margin-top: 12px;
     font-size: 13px;
 }
 
@@ -448,12 +414,10 @@ body {
     display: inline-block;
     width: 9px;
     height: 9px;
-    background: #00c853;
+    background: red;
     border-radius: 50%;
-    margin-right: 6px;
+    margin-right: 5px;
 }
-
-/* SEARCH */
 
 .search-area {
     background: white;
@@ -462,7 +426,7 @@ body {
 }
 
 .search-box {
-    max-width: 800px;
+    max-width: 850px;
     margin: auto;
     display: flex;
 }
@@ -485,8 +449,6 @@ body {
     cursor: pointer;
     font-weight: bold;
 }
-
-/* NAV */
 
 .nav {
     background: white;
@@ -513,7 +475,32 @@ body {
     color: white;
 }
 
-/* BREAKING */
+.refresh-bar {
+    background: white;
+    text-align: center;
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.refresh-btn {
+    background: #111;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.refresh-btn:disabled {
+    opacity: 0.6;
+}
+
+#refreshMessage {
+    margin-left: 10px;
+    color: #555;
+    font-size: 13px;
+}
 
 .breaking {
     background: #b00000;
@@ -526,15 +513,11 @@ body {
     margin-right: 10px;
 }
 
-/* MAIN */
-
 .container {
     max-width: 1250px;
     margin: auto;
     padding: 25px 15px;
 }
-
-/* FEATURED */
 
 .featured {
     background: white;
@@ -560,8 +543,6 @@ body {
     line-height: 1.6;
 }
 
-/* SECTION */
-
 .section-title {
     color: white;
     font-size: 25px;
@@ -569,8 +550,6 @@ body {
     border-left: 5px solid white;
     padding-left: 10px;
 }
-
-/* GRID */
 
 .news-grid {
     display: grid;
@@ -630,8 +609,6 @@ body {
     color: #777;
 }
 
-/* BUTTON */
-
 .read-btn {
     display: inline-block;
     margin-top: 10px;
@@ -644,52 +621,36 @@ body {
     font-weight: bold;
 }
 
-/* VIDEO */
-
-.video-section {
-    margin-top: 45px;
-}
-
 .video-card {
     position: relative;
 }
 
-.video-card .play {
-    position: absolute;
-    left: 50%;
-    top: 95px;
-    transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.8);
+.video-badge {
+    display: inline-block;
+    background: #b00000;
     color: white;
-    width: 55px;
-    height: 55px;
+    padding: 5px 9px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.play-button {
+    position: absolute;
+    top: 65px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 58px;
+    height: 58px;
     border-radius: 50%;
+    background: rgba(0,0,0,0.75);
+    color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
 }
-
-.video-btn {
-    background: #b00000;
-}
-
-.view-videos {
-    text-align: center;
-    margin: 25px 0;
-}
-
-.view-videos a {
-    display: inline-block;
-    background: white;
-    color: #111;
-    text-decoration: none;
-    padding: 13px 25px;
-    border-radius: 8px;
-    font-weight: bold;
-}
-
-/* LOAD MORE */
 
 .load-more-container {
     text-align: center;
@@ -705,20 +666,11 @@ body {
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-}
-
-.load-more-btn:hover {
-    background: #111;
-    color: white;
 }
 
 .load-more-btn:disabled {
     opacity: 0.6;
-    cursor: not-allowed;
 }
-
-/* NO RESULTS */
 
 .no-results {
     background: white;
@@ -727,26 +679,44 @@ body {
     text-align: center;
 }
 
-/* FOOTER */
-
 .footer {
-    background: rgba(0,0,0,0.92);
+    background: rgba(0,0,0,0.94);
     color: white;
     text-align: center;
     padding: 25px;
     margin-top: 40px;
 }
 
-/* MOBILE */
 
-@media(max-width: 600px) {
+.video-search {
+    max-width: 850px;
+    margin: 0 auto 20px;
+    display: flex;
+    gap: 8px;
+}
+
+.video-search input {
+    flex: 1;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+.video-search button {
+    padding: 14px 18px;
+    border: none;
+    border-radius: 8px;
+    background: white;
+    color: #111;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+@media(max-width:600px) {
 
     .logo {
         font-size: 27px;
-    }
-
-    .search-box {
-        width: 100%;
     }
 
     .search-box input {
@@ -767,118 +737,79 @@ body {
     }
 
     .card-image {
-        height: 180px;
+        height: 170px;
     }
 }
-
 </style>
 </head>
 
-
 <body>
 
-<!-- HEADER -->
-
 <header class="header">
-
-    <div class="logo">
-        JAPHET DAILY NEWS
-    </div>
-
+    <div class="logo">JAPHET DAILY NEWS</div>
     <div class="tagline">
         Stay informed. Stay connected.
     </div>
-
+    <div class="live-status">
+        <span class="live-dot"></span>
+        LIVE NEWS UPDATES
+    </div>
 </header>
 
-
-<!-- AUTOMATIC UPDATE STATUS -->
-
-<div class="live-bar">
-    <span class="live-dot"></span>
-    LIVE NEWS • Automatically refreshed
-    <span id="lastUpdated"></span>
-</div>
-
-
-<!-- SEARCH -->
-
 <div class="search-area">
-
 <form method="GET" action="/">
-
     <div class="search-box">
-
         <input
             type="text"
             name="search"
             value="{{ search }}"
-            placeholder="Search news, topics, football, AI, Nigeria..."
+            placeholder="Search news, topics, sources..."
         >
-
-        <button type="submit">
-            🔎 SEARCH
-        </button>
-
+        <button type="submit">🔎 SEARCH</button>
     </div>
-
 </form>
-
 </div>
-
-
-<!-- NAV -->
 
 <nav class="nav">
-
-    <a href="/">
-        🏠 Home
-    </a>
+    <a href="/">🏠 Home</a>
 
     {% for category in categories %}
-
-        <a href="#{{ category|replace(' ', '-') }}">
-            {{ icons[category] }}
-            {{ category }}
-        </a>
-
+    <a href="/?category={{ category|urlencode }}">
+        {{ icons[category] }} {{ category }}
+    </a>
     {% endfor %}
 
-    <a href="/videos">
-        🎥 Videos
-    </a>
-
+    <a href="#videos">🎥 Videos</a>
 </nav>
 
+<div class="refresh-bar">
+    <button
+        class="refresh-btn"
+        id="refreshButton"
+        onclick="refreshNews()"
+    >
+        🔄 Refresh News
+    </button>
 
-<!-- BREAKING -->
-
-{% if breaking %}
-
-<div class="breaking">
-
-    <span>
-        🔴 BREAKING NEWS
+    <span id="refreshMessage">
+        Fresh news updates automatically.
     </span>
-
-    {{ breaking.title }}
-
 </div>
 
+{% if breaking %}
+<div class="breaking">
+    <span>🔴 BREAKING NEWS</span>
+    {{ breaking.title }}
+</div>
 {% endif %}
 
-
-<!-- MAIN -->
-
 <main class="container">
-
 
 {% if search %}
 
 <h2 class="section-title">
-    🔎 Search results for "{{ search }}"
+    🔎 Search Results: "{{ search }}"
 </h2>
-
 
 {% if all_stories %}
 
@@ -888,50 +819,43 @@ body {
 
 <article class="card">
 
-    {% if story.image %}
-    <img
-        class="card-image"
-        src="{{ story.image }}"
-        alt="News image"
-        loading="lazy"
-        onerror="this.style.display='none'"
-    >
-    {% endif %}
+{% if story.image %}
+<img
+    class="card-image"
+    src="{{ story.image }}"
+    alt="News image"
+    loading="lazy"
+>
+{% endif %}
 
-    <div class="card-top">
+<div class="card-top">
 
-        <div class="category">
-            {{ icons[story.category] }}
-            {{ story.category }}
-        </div>
+<div class="category">
+    {{ icons[story.category] }}
+    {{ story.category }}
+</div>
 
-        <h3>
-            {{ story.title }}
-        </h3>
+<h3>{{ story.title }}</h3>
 
-        {% if story.description %}
+{% if story.description %}
+<p>
+    {{ story.description[:250] }}
+    {% if story.description|length > 250 %}...{% endif %}
+</p>
+{% endif %}
 
-        <p>
-            {{ story.description[:250] }}
-            {% if story.description|length > 250 %}
-                ...
-            {% endif %}
-        </p>
+<a
+class="read-btn"
+href="/story?title={{ story.title|urlencode }}&description={{ story.description|urlencode }}&link={{ story.link|urlencode }}&category={{ story.category|urlencode }}&source={{ story.source|urlencode }}&image={{ story.image|urlencode }}"
+>
+    Read Story →
+</a>
 
-        {% endif %}
+</div>
 
-        <a
-            class="read-btn"
-            href="/story?title={{ story.title|urlencode }}&description={{ story.description|urlencode }}&link={{ story.link|urlencode }}&category={{ story.category|urlencode }}&source={{ story.source|urlencode }}"
-        >
-            Read Story →
-        </a>
-
-    </div>
-
-    <div class="card-footer">
-        {{ story.source }}
-    </div>
+<div class="card-footer">
+    {{ story.source }}
+</div>
 
 </article>
 
@@ -939,437 +863,292 @@ body {
 
 </div>
 
-
 {% else %}
 
 <div class="no-results">
-
-    <h2>
-        No stories found
-    </h2>
-
-    <p>
-        Try another search word or phrase.
-    </p>
-
+    <h2>No stories found</h2>
+    <p>Try another search term.</p>
 </div>
 
 {% endif %}
 
-
 {% else %}
-
-
-<!-- FEATURED -->
 
 {% if breaking %}
 
 <section class="featured">
 
-    <div class="featured-label">
-        🔥 LATEST STORY
-    </div>
+<div class="featured-label">
+    🔥 LATEST STORY
+</div>
 
-    <h1>
-        {{ breaking.title }}
-    </h1>
+<h1>{{ breaking.title }}</h1>
 
-    <p>
-        {{ breaking.description[:400] }}
+<p>
+    {{ breaking.description[:400] }}
+    {% if breaking.description|length > 400 %}...{% endif %}
+</p>
 
-        {% if breaking.description|length > 400 %}
-            ...
-        {% endif %}
-    </p>
-
-    <a
-        class="read-btn"
-        href="/story?title={{ breaking.title|urlencode }}&description={{ breaking.description|urlencode }}&link={{ breaking.link|urlencode }}&category={{ breaking.category|urlencode }}&source={{ breaking.source|urlencode }}"
-    >
-        Read Full Story →
-    </a>
+<a
+class="read-btn"
+href="/story?title={{ breaking.title|urlencode }}&description={{ breaking.description|urlencode }}&link={{ breaking.link|urlencode }}&category={{ breaking.category|urlencode }}&source={{ breaking.source|urlencode }}&image={{ breaking.image|urlencode }}"
+>
+    Read Full Story →
+</a>
 
 </section>
 
 {% endif %}
 
+<section id="videos">
 
-<!-- VIDEO SECTION -->
+<h2 class="section-title">
+    🎥 Latest Videos
+</h2>
 
-<section class="video-section">
+<div class="news-grid">
 
-    <h2 class="section-title">
-        🎥 Latest Videos
-    </h2>
+{% for story in videos[:10] %}
 
-    <div class="news-grid">
+<article class="card video-card">
 
-    {% for video in videos[:6] %}
+{% if story.image %}
+<img
+    class="card-image"
+    src="{{ story.image }}"
+    alt="Video thumbnail"
+    loading="lazy"
+>
+{% endif %}
 
-    <article class="card video-card">
+<div class="play-button">▶</div>
 
-        {% if video.image %}
+<div class="card-top">
 
-        <img
-            class="card-image"
-            src="{{ video.image }}"
-            alt="Video thumbnail"
-            loading="lazy"
-            onerror="this.style.display='none'"
-        >
+<div class="video-badge">
+    🎥 VIDEO
+</div>
 
-        {% endif %}
+<div class="category">
+    {{ icons[story.category] }}
+    {{ story.category }}
+</div>
 
-        <div class="play">
-            ▶
-        </div>
+<h3>{{ story.title }}</h3>
 
-        <div class="card-top">
+<p>
+    {{ story.description[:180] }}
+    {% if story.description|length > 180 %}...{% endif %}
+</p>
 
-            <div class="category">
-                🎥 VIDEO
-            </div>
+<a
+class="read-btn"
+href="{{ story.link }}"
+target="_blank"
+rel="noopener noreferrer"
+>
+    ▶ Watch Video
+</a>
 
-            <h3>
-                {{ video.title }}
-            </h3>
+</div>
 
-            {% if video.description %}
+<div class="card-footer">
+    {{ story.source }}
+</div>
 
-            <p>
-                {{ video.description[:150] }}
+</article>
 
-                {% if video.description|length > 150 %}
-                    ...
-                {% endif %}
-            </p>
+{% else %}
 
-            {% endif %}
+<div class="no-results">
+    <h3>🎥 No videos available yet</h3>
+    <p>
+        Video stories will appear here when our news feeds provide them.
+    </p>
+</div>
 
-            <a
-                class="read-btn video-btn"
-                href="{{ video.link }}"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                ▶ Watch Video
-            </a>
+{% endfor %}
 
-        </div>
-
-        <div class="card-footer">
-            {{ video.source }}
-        </div>
-
-    </article>
-
-    {% endfor %}
-
-    </div>
-
-    <div class="view-videos">
-        <a href="/videos">
-            🎥 View All Videos →
-        </a>
-    </div>
-
+</div>
 </section>
-
-
-<!-- CATEGORIES -->
 
 {% for category in categories %}
 
 <section id="{{ category|replace(' ', '-') }}">
 
-    <h2 class="section-title">
+<h2 class="section-title">
+    {{ icons[category] }} {{ category }} News
+</h2>
 
-        {{ icons[category] }}
+<div class="news-grid">
 
-        {{ category }} News
+{% for story in category_stories[category] %}
 
-    </h2>
+<article class="card">
 
+{% if story.image %}
+<img
+    class="card-image"
+    src="{{ story.image }}"
+    alt="News image"
+    loading="lazy"
+>
+{% endif %}
 
-    <div class="news-grid">
+<div class="card-top">
 
+<div class="category">
+    {{ icons[story.category] }}
+    {{ story.category }}
+</div>
 
-    {% for story in category_stories[category] %}
+<h3>{{ story.title }}</h3>
 
-    <article class="card">
+{% if story.description %}
+<p>
+    {{ story.description[:180] }}
+    {% if story.description|length > 180 %}...{% endif %}
+</p>
+{% endif %}
 
-        {% if story.image %}
+<a
+class="read-btn"
+href="/story?title={{ story.title|urlencode }}&description={{ story.description|urlencode }}&link={{ story.link|urlencode }}&category={{ story.category|urlencode }}&source={{ story.source|urlencode }}&image={{ story.image|urlencode }}"
+>
+    Read Story →
+</a>
 
-        <img
-            class="card-image"
-            src="{{ story.image }}"
-            alt="News image"
-            loading="lazy"
-            onerror="this.style.display='none'"
-        >
+</div>
 
-        {% endif %}
+<div class="card-footer">
+    {{ story.source }}
+</div>
 
-        <div class="card-top">
+</article>
 
-            <div class="category">
+{% endfor %}
 
-                {{ icons[story.category] }}
-
-                {{ story.category }}
-
-            </div>
-
-
-            <h3>
-
-                {{ story.title }}
-
-            </h3>
-
-
-            {% if story.description %}
-
-            <p>
-
-                {{ story.description[:180] }}
-
-                {% if story.description|length > 180 %}
-                    ...
-                {% endif %}
-
-            </p>
-
-            {% endif %}
-
-
-            <a
-                class="read-btn"
-                href="/story?title={{ story.title|urlencode }}&description={{ story.description|urlencode }}&link={{ story.link|urlencode }}&category={{ story.category|urlencode }}&source={{ story.source|urlencode }}"
-            >
-
-                Read Story →
-
-            </a>
-
-
-        </div>
-
-
-        <div class="card-footer">
-
-            {{ story.source }}
-
-        </div>
-
-
-    </article>
-
-    {% endfor %}
-
-
-    </div>
-
+</div>
 </section>
 
 {% endfor %}
 
-
-<!-- LOAD MORE -->
-
 <div class="load-more-container">
 
-    <button
-        id="loadMoreButton"
-        class="load-more-btn"
-        onclick="loadMoreNews()"
-    >
-
-        ➕ Load More News
-
-    </button>
+<button
+id="loadMoreButton"
+class="load-more-btn"
+onclick="loadMoreNews()"
+>
+    ➕ Load More News
+</button>
 
 </div>
 
-
 {% endif %}
-
 
 </main>
 
-
-<!-- FOOTER -->
-
 <footer class="footer">
 
-    <strong>
-        JAPHET DAILY NEWS
-    </strong>
+<strong>JAPHET DAILY NEWS</strong>
 
-    <br><br>
+<br><br>
 
-    Bringing you fresh news
-    from Nigeria and around the world.
+Bringing you the latest news from Nigeria and around the world.
 
-    <br><br>
+<br><br>
 
-    © 2026 Japhet Daily News
+🔄 Automatic fresh news enabled
+
+<br><br>
+
+© 2026 Japhet Daily News
 
 </footer>
-
 
 <script>
 
 let newsOffset = 20;
 let loading = false;
 
-
-/* =========================
-   LAST UPDATED
-========================= */
-
-function updateTime() {
-
-    const now = new Date();
-
-    document.getElementById("lastUpdated").innerText =
-        " • Updated " + now.toLocaleTimeString();
-
-}
-
-updateTime();
-
-
-/* =========================
-   AUTOMATIC FRESH NEWS
-========================= */
-
-/*
-   Refresh the page every 5 minutes.
-   This means the browser asks Flask for
-   fresh RSS data automatically.
-*/
-
-setInterval(function() {
-
-    if (!document.hidden && !document.querySelector('input:focus')) {
-        window.location.reload();
-    }
-
-}, 5 * 60 * 1000);
-
-
-/* =========================
-   LOAD MORE
-========================= */
-
 async function loadMoreNews() {
 
-    if (loading) {
-        return;
-    }
+    if (loading) return;
 
     loading = true;
 
     const button =
         document.getElementById("loadMoreButton");
 
-    button.innerText =
-        "⏳ Loading more news...";
-
+    button.innerText = "⏳ Loading...";
     button.disabled = true;
-
 
     try {
 
-        const response =
-            await fetch(
-                "/load_more?offset=" + newsOffset
-            );
-
+        const response = await fetch(
+            "/load_more?offset=" + newsOffset
+        );
 
         if (!response.ok) {
-
-            throw new Error(
-                "Could not load news"
-            );
-
+            throw new Error("Could not load news");
         }
 
+        const data = await response.json();
+        const stories = data.stories || [];
 
-        const data =
-            await response.json();
-
-
-        const stories =
-            data.stories;
-
-
-        if (!stories || stories.length === 0) {
+        if (stories.length === 0) {
 
             button.innerText =
                 "No More News Available";
 
-            button.disabled = true;
-
-            loading = false;
-
             return;
-
         }
 
-
-        let grid =
+        const grid =
             document.querySelector(".news-grid");
 
-
         if (!grid) {
-
-            throw new Error(
-                "News grid not found"
-            );
-
+            throw new Error("News grid not found");
         }
-
 
         stories.forEach(function(story) {
 
             const card =
                 document.createElement("article");
 
-            card.className =
-                "card";
+            card.className = "card";
 
+            let description =
+                story.description || "";
 
-            const description =
-                story.description
-                ? story.description.substring(
-                    0,
-                    180
-                ) + (
-                    story.description.length > 180
-                    ? "..."
-                    : ""
-                )
-                : "";
+            description =
+                description.substring(0, 180);
 
+            if (
+                story.description &&
+                story.description.length > 180
+            ) {
+                description += "...";
+            }
 
-            const image =
-                story.image
-                ? `
+            let imageHTML = "";
+
+            if (story.image) {
+
+                imageHTML = `
                     <img
                         class="card-image"
                         src="${escapeHtml(story.image)}"
                         alt="News image"
                         loading="lazy"
                     >
-                  `
-                : "";
-
+                `;
+            }
 
             card.innerHTML = `
 
-                ${image}
+                ${imageHTML}
 
                 <div class="card-top">
 
@@ -1377,63 +1156,75 @@ async function loadMoreNews() {
 
                         ${getIcon(story.category)}
 
-                        ${escapeHtml(story.category)}
+                        ${escapeHtml(
+                            story.category
+                        )}
 
                     </div>
 
-
                     <h3>
-
-                        ${escapeHtml(story.title)}
-
+                        ${escapeHtml(
+                            story.title
+                        )}
                     </h3>
 
-
-                    ${
-                        description
-                        ? `
-                        <p>
-                            ${escapeHtml(description)}
-                        </p>
-                        `
-                        : ""
-                    }
-
+                    <p>
+                        ${escapeHtml(
+                            description
+                        )}
+                    </p>
 
                     <a
                         class="read-btn"
-                        href="/story?title=${encodeURIComponent(story.title)}&description=${encodeURIComponent(story.description || "")}&link=${encodeURIComponent(story.link)}&category=${encodeURIComponent(story.category)}&source=${encodeURIComponent(story.source)}"
+                        href="/story?title=${
+                            encodeURIComponent(
+                                story.title || ""
+                            )
+                        }&description=${
+                            encodeURIComponent(
+                                story.description || ""
+                            )
+                        }&link=${
+                            encodeURIComponent(
+                                story.link || ""
+                            )
+                        }&category=${
+                            encodeURIComponent(
+                                story.category || ""
+                            )
+                        }&source=${
+                            encodeURIComponent(
+                                story.source || ""
+                            )
+                        }&image=${
+                            encodeURIComponent(
+                                story.image || ""
+                            )
+                        }"
                     >
-
                         Read Story →
-
                     </a>
 
                 </div>
 
-
                 <div class="card-footer">
 
-                    ${escapeHtml(story.source)}
+                    ${escapeHtml(
+                        story.source || ""
+                    )}
 
                 </div>
-
             `;
 
-
             grid.appendChild(card);
-
         });
 
-
         newsOffset += 10;
-
 
         button.innerText =
             "➕ Load More News";
 
         button.disabled = false;
-
 
     } catch (error) {
 
@@ -1446,15 +1237,105 @@ async function loadMoreNews() {
 
     }
 
-
     loading = false;
-
 }
 
 
-/* =========================
-   ICONS
-========================= */
+async function refreshNews() {
+
+    const button =
+        document.getElementById("refreshButton");
+
+    const message =
+        document.getElementById("refreshMessage");
+
+    button.disabled = true;
+    button.innerText = "⏳ Updating...";
+
+    message.innerText =
+        "Fetching fresh news...";
+
+    try {
+
+        const response =
+            await fetch("/refresh");
+
+        if (!response.ok) {
+            throw new Error("Refresh failed");
+        }
+
+        const data =
+            await response.json();
+
+        if (!data.success) {
+            throw new Error(
+                "News update failed"
+            );
+        }
+
+        message.innerText =
+            "✅ Fresh news found: "
+            + data.count;
+
+        setTimeout(function() {
+
+            location.reload();
+
+        }, 700);
+
+    } catch (error) {
+
+        console.error(error);
+
+        message.innerText =
+            "❌ Update failed. Try again.";
+
+        button.disabled = false;
+        button.innerText =
+            "🔄 Refresh News";
+    }
+}
+
+
+/*
+    AUTOMATIC REFRESH
+    Checks for fresh news every 5 minutes.
+*/
+
+setInterval(function() {
+
+    refreshNews();
+
+}, 5 * 60 * 1000);
+
+
+
+function searchVideos() {
+
+    const input =
+        document.getElementById("videoSearch");
+
+    const query =
+        input.value.trim();
+
+    if (!query) {
+        alert("Type something to search for videos.");
+        return;
+    }
+
+    const url =
+        "https://www.youtube.com/results?search_query="
+        + encodeURIComponent(
+            query + " news"
+        );
+
+    window.open(
+        url,
+        "_blank",
+        "noopener,noreferrer"
+    );
+}
+
 
 function getIcon(category) {
 
@@ -1471,51 +1352,42 @@ function getIcon(category) {
     };
 
     return icons[category] || "📰";
-
 }
 
-
-/* =========================
-   SECURITY
-========================= */
 
 function escapeHtml(text) {
 
     const div =
         document.createElement("div");
 
-    div.textContent =
-        text || "";
+    div.textContent = text || "";
 
     return div.innerHTML;
-
 }
 
 </script>
-
 
 </body>
 </html>
 """
 
 
-# ============================================================
-# VIDEO PAGE HTML
-# ============================================================
-
-VIDEO_HTML = """
+STORY_HTML = r"""
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+>
 
-<title>Videos - JAPHET DAILY NEWS</title>
+<title>
+{{ title }} - JAPHET DAILY NEWS
+</title>
 
 <style>
 
@@ -1527,301 +1399,31 @@ body {
 
     margin: 0;
 
-    font-family: Arial, Helvetica, sans-serif;
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 
     background:
         linear-gradient(
-            rgba(0,0,0,0.72),
-            rgba(0,0,0,0.72)
+            rgba(0,0,0,0.75),
+            rgba(0,0,0,0.75)
         ),
-        url("/static/images/background.jpg");
+        url(
+            "/static/images/background.jpg"
+        );
 
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
 
-}
-
-.header {
-
-    background: rgba(0,0,0,0.92);
-
-    color: white;
-
-    text-align: center;
-
-    padding: 25px;
-
-}
-
-.logo {
-
-    font-size: 30px;
-
-    font-weight: bold;
-
-}
-
-.container {
-
-    max-width: 1200px;
-
-    margin: auto;
-
-    padding: 25px 15px;
-
-}
-
-.title {
-
-    color: white;
-
-    border-left: 5px solid white;
-
-    padding-left: 12px;
-
-    margin-bottom: 25px;
-
-}
-
-.grid {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(
-            auto-fit,
-            minmax(280px, 1fr)
-        );
-
-    gap: 20px;
-
-}
-
-.card {
-
-    background: white;
-
-    border-radius: 12px;
-
-    overflow: hidden;
-
-    box-shadow:
-        0 4px 15px
-        rgba(0,0,0,0.2);
-
-}
-
-.thumbnail {
-
-    width: 100%;
-
-    height: 210px;
-
-    object-fit: cover;
-
-    background: #ddd;
-
-}
-
-.card-body {
-
-    padding: 18px;
-
-}
-
-.card h2 {
-
-    font-size: 19px;
-
-    line-height: 1.4;
-
-}
-
-.card p {
-
-    color: #555;
-
-    line-height: 1.5;
-
-}
-
-.watch {
-
-    display: inline-block;
-
-    margin-top: 10px;
-
-    padding: 11px 16px;
-
-    background: #111;
-
-    color: white;
-
-    text-decoration: none;
-
-    border-radius: 7px;
-
-    font-weight: bold;
-
-}
-
-.back {
-
-    display: inline-block;
-
-    margin-bottom: 20px;
-
-    color: white;
-
-    text-decoration: none;
-
-    font-weight: bold;
-
-}
-
-</style>
-
-</head>
-
-
-<body>
-
-
-<header class="header">
-
-    <div class="logo">
-        JAPHET DAILY NEWS
-    </div>
-
-</header>
-
-
-<main class="container">
-
-    <a class="back" href="/">
-        ← Back to News
-    </a>
-
-    <h1 class="title">
-        🎥 Latest News Videos
-    </h1>
-
-
-    <div class="grid">
-
-    {% for video in videos %}
-
-    <article class="card">
-
-        {% if video.image %}
-
-        <img
-            class="thumbnail"
-            src="{{ video.image }}"
-            alt="Video thumbnail"
-            loading="lazy"
-        >
-
-        {% endif %}
-
-
-        <div class="card-body">
-
-            <h2>
-                🎥 {{ video.title }}
-            </h2>
-
-            {% if video.description %}
-
-            <p>
-                {{ video.description[:250] }}
-
-                {% if video.description|length > 250 %}
-                    ...
-                {% endif %}
-            </p>
-
-            {% endif %}
-
-            <a
-                class="watch"
-                href="{{ video.link }}"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                ▶ Watch Video
-            </a>
-
-        </div>
-
-    </article>
-
-    {% endfor %}
-
-    </div>
-
-</main>
-
-
-</body>
-
-</html>
-"""
-
-
-# ============================================================
-# STORY HTML
-# ============================================================
-
-STORY_HTML = """
-
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
-
-<title>
-{{ title }} - JAPHET DAILY NEWS
-</title>
-
-
-<style>
-
-body {
-
-    margin: 0;
-
-    font-family:
-        Arial,
-        sans-serif;
-
-    background:
-        linear-gradient(
-            rgba(0,0,0,0.72),
-            rgba(0,0,0,0.72)
-        ),
-        url("/static/images/background.jpg");
-
-    background-size: cover;
-
-    background-position: center;
-
     color: #222;
-
 }
-
 
 .header {
 
     background:
-        rgba(0,0,0,0.92);
+        rgba(0,0,0,0.94);
 
     color: white;
 
@@ -1831,7 +1433,6 @@ body {
 
 }
 
-
 .logo {
 
     font-size: 30px;
@@ -1839,7 +1440,6 @@ body {
     font-weight: bold;
 
 }
-
 
 .article {
 
@@ -1859,6 +1459,20 @@ body {
 
 }
 
+.article-image {
+
+    width: 100%;
+
+    max-height: 450px;
+
+    object-fit: cover;
+
+    border-radius: 10px;
+
+    margin:
+        15px 0 25px;
+
+}
 
 .category {
 
@@ -1868,7 +1482,6 @@ body {
 
 }
 
-
 h1 {
 
     font-size: 34px;
@@ -1876,7 +1489,6 @@ h1 {
     line-height: 1.3;
 
 }
-
 
 .description {
 
@@ -1888,7 +1500,6 @@ h1 {
 
 }
 
-
 .source {
 
     margin-top: 20px;
@@ -1897,15 +1508,13 @@ h1 {
 
 }
 
-
 .original {
 
     display: inline-block;
 
     margin-top: 25px;
 
-    padding:
-        14px 20px;
+    padding: 14px 20px;
 
     background: #111;
 
@@ -1918,7 +1527,6 @@ h1 {
     font-weight: bold;
 
 }
-
 
 .back {
 
@@ -1934,46 +1542,55 @@ h1 {
 
 }
 
+@media(max-width:600px) {
+
+    .article {
+
+        margin: 20px 10px;
+
+        padding: 20px;
+
+    }
+
+    h1 {
+
+        font-size: 25px;
+
+    }
+
+    .description {
+
+        font-size: 16px;
+
+    }
+
+}
+
 </style>
 
 </head>
 
-
 <body>
-
 
 <header class="header">
 
     <div class="logo">
-
         JAPHET DAILY NEWS
-
     </div>
 
 </header>
 
-
 <article class="article">
 
-
-<a
-    class="back"
-    href="/"
->
-
+<a class="back" href="/">
     ← Back to News
-
 </a>
-
 
 <div class="category">
 
-    {{ icon }}
-
-    {{ category }}
+    {{ icon }} {{ category }}
 
 </div>
-
 
 <h1>
 
@@ -1981,6 +1598,15 @@ h1 {
 
 </h1>
 
+{% if image %}
+
+<img
+    class="article-image"
+    src="{{ image }}"
+    alt="News image"
+>
+
+{% endif %}
 
 <div class="description">
 
@@ -1988,13 +1614,11 @@ h1 {
 
 </div>
 
-
 <div class="source">
 
     Source: {{ source }}
 
 </div>
-
 
 <a
     class="original"
@@ -2007,20 +1631,13 @@ h1 {
 
 </a>
 
-
 </article>
-
 
 </body>
 
 </html>
-
 """
 
-
-# =========================
-# START SERVER
-# =========================
 
 if __name__ == "__main__":
 
